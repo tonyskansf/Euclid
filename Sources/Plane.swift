@@ -202,20 +202,30 @@ internal extension Plane {
     }
 
     init?(points: [Vector], convex: Bool?) {
-        guard !points.isEmpty, !pointsAreDegenerate(points) else {
+        guard !pointsAreDegenerate(points) else {
             return nil
         }
-        self.init(unchecked: points, convex: convex)
-        // Check all points lie on this plane
-        if points.contains(where: { !containsPoint($0) }) {
+        guard let first = points.first, let normal = faceNormalForPolygonPoints(
+            points,
+            convex: convex,
+            returnAverageNormal: false,
+            failIfNonPlanar: true
+        ) else {
             return nil
         }
+        self.init(unchecked: normal, pointOnPlane: first)
     }
 
     init(unchecked points: [Vector], convex: Bool?) {
-        assert(!pointsAreDegenerate(points))
-        let normal = faceNormalForPolygonPoints(points, convex: convex)
-        self.init(unchecked: normal, pointOnPlane: points[0])
+        assert(!points.isEmpty && !pointsAreDegenerate(points))
+        assert(pointsAreCoplanar(points))
+        let normal = faceNormalForPolygonPoints(
+            points,
+            convex: convex,
+            returnAverageNormal: false,
+            failIfNonPlanar: false
+        ) ?? .unitZ
+        self.init(unchecked: normal, pointOnPlane: points.first ?? .zero)
     }
 
     // Approximate equality

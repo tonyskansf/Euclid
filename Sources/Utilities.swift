@@ -115,8 +115,10 @@ func triangulateVertices(
     // would be incorrectly triangulated. However it's not clear why this is
     // necessary, or if it will do the correct thing in all circumstances
     let flatteningPlane = FlatteningPlane(
-        normal: plane?.normal ??
-            faceNormalForPolygonPoints(positions, convex: false)
+        normal: plane?.normal ?? faceNormalForPolygonPoints(
+            positions,
+            convex: false
+        )
     )
     let flattenedPoints = vertices.map { flatteningPlane.flattenPoint($0.position) }
     let isClockwise = flattenedPointsAreClockwise(flattenedPoints)
@@ -227,34 +229,18 @@ func pointsAreDegenerate(_ points: [Vector]) -> Bool {
     return false
 }
 
-// Note: assumes points are not degenerate
+// Note: assumes points are planar and not degenerate
 func pointsAreConvex(_ points: [Vector]) -> Bool {
     let count = points.count
-    guard count > 3, let a = points.last else {
+    guard count > 3 else {
         return count > 2
     }
-    var normal: Vector?
-    var ab = points[0] - a
-    for i in 0 ..< count {
-        let b = points[i]
-        let c = points[(i + 1) % count]
-        let bc = c - b
-        var n = ab.cross(bc)
-        let length = n.length
-        // check result is large enough to be reliable
-        if length > epsilon {
-            n = n / length
-            if let normal = normal {
-                if n.dot(normal) < 0 {
-                    return false
-                }
-            } else {
-                normal = n
-            }
-        }
-        ab = bc
-    }
-    return true
+    return faceNormalsForPolygonPoints(
+        points,
+        firstOnly: false,
+        exitIfNonConvex: true,
+        exitIfNonPlanar: false
+    ).convex ?? true
 }
 
 // Test if path is self-intersecting
@@ -285,51 +271,98 @@ func pointsAreSelfIntersecting(_ points: [Vector]) -> Bool {
     return false
 }
 
+// Computes the average face normal for a collection of points
+// Points are assumed to be ordered in a counter-clockwise direction
+// Points are not required to be coplanar or non-degenerate
+func faceNormalForPolygonPoints(_ points: [Vector], convex: Bool?) -> Vector {
+    faceNormalForPolygonPoints(
+        points,
+        convex: convex,
+        returnAverageNormal: true,
+        failIfNonPlanar: false
+    ) ?? .unitZ
+}
+
 // Computes the face normal for a collection of points
 // Points are assumed to be ordered in a counter-clockwise direction
-// Points are not verified to be coplanar or non-degenerate
-// Points are not required to form a convex polygon
-func faceNormalForPolygonPoints(_ points: [Vector], convex: Bool?) -> Vector {
+func faceNormalForPolygonPoints(
+    _ points: [Vector],
+    convex: Bool?,
+    returnAverageNormal: Bool,
+    failIfNonPlanar: Bool
+) -> Vector? {
     let count = points.count
-    let unitZ = Vector(0, 0, 1)
     switch count {
     case 0, 1:
-        return unitZ
+        return .unitZ
     case 2:
         let ab = points[1] - points[0]
-        let normal = ab.cross(unitZ).cross(ab)
+        let normal = ab.cross(.unitZ).cross(ab)
         let length = normal.length
         guard length > 0 else {
             // Points lie along z axis
-            return Vector(1, 0, 0)
+            return .unitX
         }
         return normal / length
     default:
-        func faceNormalForConvexPoints(_ points: [Vector]) -> Vector {
-            let count = points.count
-            var b = points[count - 1]
-            var ab = b - points[count - 2]
-            var bestLengthSquared = 0.0
-            var best: Vector?
-            for c in points {
-                let bc = c - b
-                let normal = ab.cross(bc)
-                let lengthSquared = normal.lengthSquared
-                if lengthSquared > bestLengthSquared {
-                    bestLengthSquared = lengthSquared
-                    best = normal / lengthSquared.squareRoot()
-                }
-                b = c
-                ab = bc
+        func average(_ normals: [Vector]) -> Vector? {
+            guard returnAverageNormal, let first = normals.first else {
+                return normals.first
             }
-            return best ?? Vector(0, 0, 1)
+            var normal = first
+            for n in normals.dropFirst() {
+                if first.dot(n) < 0 {
+                    normal -= n
+                } else {
+                    normal += n
+                }
+            }
+            return normal.normalized()
         }
-        let normal = faceNormalForConvexPoints(points)
-        let convex = convex ?? pointsAreConvex(points)
-        if !convex {
+        if convex == true {
+            assert(pointsAreConvex(points))
+            return faceNormalsForPolygonPoints(
+                points,
+                firstOnly: !(failIfNonPlanar || returnAverageNormal),
+                exitIfNonConvex: false,
+                exitIfNonPlanar: failIfNonPlanar
+            ).normals.first
+        }
+        let isConvex: Bool
+        let normals: [Vector]
+        if convex == false {
+            assert(!pointsAreConvex(points))
+            isConvex = false
+            normals = faceNormalsForPolygonPoints(
+                points,
+                firstOnly: !(failIfNonPlanar || returnAverageNormal),
+                exitIfNonConvex: false,
+                exitIfNonPlanar: failIfNonPlanar
+            ).normals
+        } else {
+            let result = faceNormalsForPolygonPoints(
+                points,
+                firstOnly: false,
+                exitIfNonConvex: false,
+                exitIfNonPlanar: failIfNonPlanar
+            )
+            isConvex = result.convex ?? false
+            normals = result.normals
+        }
+        guard let normal = average(normals) else {
+            return nil
+        }
+        if !isConvex {
             let flatteningPlane = FlatteningPlane(normal: normal)
             let flattenedPoints = points.map { flatteningPlane.flattenPoint($0) }
-            let flattenedNormal = faceNormalForConvexPoints(flattenedPoints)
+            guard let flattenedNormal = faceNormalsForPolygonPoints(
+                flattenedPoints,
+                firstOnly: true,
+                exitIfNonConvex: false,
+                exitIfNonPlanar: false
+            ).normals.first else {
+                return nil
+            }
             let isClockwise = flattenedPointsAreClockwise(flattenedPoints)
             if (flattenedNormal.z > 0) == isClockwise {
                 return -normal
@@ -339,23 +372,68 @@ func faceNormalForPolygonPoints(_ points: [Vector], convex: Bool?) -> Vector {
     }
 }
 
+private func faceNormalsForPolygonPoints(
+    _ points: [Vector],
+    firstOnly: Bool,
+    exitIfNonConvex: Bool,
+    exitIfNonPlanar: Bool
+) -> (normals: [Vector], convex: Bool?, planar: Bool?) {
+    assert(points.count > 2)
+    assert(!firstOnly || !(exitIfNonConvex || exitIfNonPlanar))
+    let count = points.count
+    var b = points[count - 1]
+    var ab = b - points[count - 2]
+    var normals = [Vector]()
+    var convex, planar: Bool?
+    for c in points {
+        let bc = c - b
+        let normal = ab.cross(bc)
+        let length = normal.length
+        if length > epsilon {
+            let normal = normal / length
+            if firstOnly {
+                return ([normal], nil, nil)
+            }
+            if let first = normals.first {
+                if first.dot(normal) < 0 {
+                    if planar != false, first != -normal {
+                        if exitIfNonPlanar {
+                            return ([], false, false)
+                        }
+                        planar = false
+                    }
+                    if exitIfNonConvex {
+                        return ([], false, planar)
+                    }
+                    convex = false
+                } else if planar != false, first != normal {
+                    if exitIfNonPlanar {
+                        return ([], convex, false)
+                    }
+                    planar = false
+                }
+            }
+            normals.append(normal)
+        }
+        b = c
+        ab = bc
+    }
+    if normals.isEmpty {
+        return ([], nil, nil)
+    }
+    return (normals, convex ?? true, planar ?? true)
+}
+
 func pointsAreCoplanar(_ points: [Vector]) -> Bool {
     if points.count < 4 {
         return true
     }
-    let b = points[1]
-    let ab = b - points[0]
-    let bc = points[2] - b
-    let normal = ab.cross(bc)
-    let length = normal.length
-    if length < epsilon {
-        return false
-    }
-    let plane = Plane(unchecked: normal / length, pointOnPlane: b)
-    for p in points[3...] where !plane.containsPoint(p) {
-        return false
-    }
-    return true
+    return faceNormalsForPolygonPoints(
+        points,
+        firstOnly: false,
+        exitIfNonConvex: false,
+        exitIfNonPlanar: true
+    ).planar == true
 }
 
 // https://stackoverflow.com/questions/1165647/how-to-determine-if-a-list-of-polygon-points-are-in-clockwise-order#1165943

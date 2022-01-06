@@ -442,11 +442,7 @@ internal extension Path {
 
     // Returns the most suitable FlatteningPlane for the path
     var flatteningPlane: FlatteningPlane {
-        if let plane = plane {
-            return FlatteningPlane(normal: plane.normal)
-        }
-        let positions = isClosed ? points.dropLast().map { $0.position } : points.map { $0.position }
-        return FlatteningPlane(points: positions, convex: nil)
+        FlatteningPlane(normal: faceNormal)
     }
 
     // TODO: Make this more robust, then make public
