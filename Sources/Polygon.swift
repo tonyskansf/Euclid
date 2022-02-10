@@ -151,6 +151,16 @@ public extension Polygon {
         vertices.contains(where: { $0.color != .white })
     }
 
+    /// Returns the ordered array of polygon edges
+    var orderedEdges: [LineSegment] {
+        var p0 = vertices.last!.position
+        return vertices.map {
+            let p1 = $0.position
+            defer { p0 = p1 }
+            return LineSegment(unchecked: p0, p1)
+        }
+    }
+
     /// An unordered set of polygon edges.
     /// The direction of each edge is normalized relative to the origin to simplify edge-equality comparisons.
     var undirectedEdges: Set<LineSegment> {
@@ -439,6 +449,57 @@ internal extension MutableCollection where Element == Polygon, Index == Int {
             }
         }
         return true
+    }
+}
+
+internal extension Array where Element == Polygon {
+    mutating func addPoint(
+        _ point: Vector,
+        material: Polygon.Material?,
+        verticesByPosition: [Vector: [Vertex]]
+    ) {
+        var facing = [Polygon]()
+        for (i, polygon) in enumerated().reversed() {
+            if point.compare(with: polygon.plane) == .front {
+                facing.append(polygon)
+                remove(at: i)
+            }
+        }
+        // Find bounding edges
+        var edges = [LineSegment]()
+        for polygon in facing {
+            for edge in polygon.orderedEdges {
+                if let index = edges.firstIndex(where: {
+                    $0.start == edge.end && $0.end == edge.start
+                }) {
+                    edges.remove(at: index)
+                } else {
+                    edges.append(edge)
+                }
+            }
+        }
+        // Create new triangles
+        for edge in edges {
+            let points = [point, edge.start, edge.end]
+            let faceNormal = faceNormalForPolygonPoints(points, convex: true)
+            let vertices = points.map { p -> Vertex in
+                let matches = verticesByPosition[p] ?? []
+                var best: Vertex?, bestDot = 1.0
+                for v in matches {
+                    let dot = abs(1 - v.normal.dot(faceNormal))
+                    if dot < bestDot {
+                        bestDot = dot
+                        best = v
+                    }
+                }
+                return best ?? Vertex(p)
+            }
+            guard let triangle = Polygon(vertices, material: material) else {
+                assertionFailure()
+                continue
+            }
+            append(triangle)
+        }
     }
 }
 

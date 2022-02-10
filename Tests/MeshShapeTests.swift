@@ -9,6 +9,12 @@
 @testable import Euclid
 import XCTest
 
+private extension Mesh {
+    var isActuallyConvex: Bool {
+        BSP(Mesh(polygons)) { false }.isConvex
+    }
+}
+
 class MeshShapeTests: XCTestCase {
     // MARK: Fill
 
@@ -167,8 +173,83 @@ class MeshShapeTests: XCTestCase {
         XCTAssertEqual(mesh.polygons.count, 5)
     }
 
-    func testStrokeSqaureWithTriangle() {
+    func testStrokeSquareWithTriangle() {
         let mesh = Mesh.stroke(.square(), detail: 3)
         XCTAssertEqual(mesh.polygons.count, 12)
+    }
+
+    // MARK: Convex Hull
+
+    func testConvexHullOfCubes() {
+        let mesh1 = Mesh.cube().translated(by: Vector(-1, 0.5, 0.7))
+        let mesh2 = Mesh.cube().translated(by: Vector(1, 0))
+        let mesh = Mesh.convexHull(of: [mesh1, mesh2])
+        XCTAssert(mesh.isKnownConvex)
+        XCTAssert(mesh.isActuallyConvex)
+        XCTAssert(mesh.isWatertight)
+        XCTAssert(mesh.polygons.areWatertight)
+        XCTAssertEqual(mesh.bounds, mesh1.bounds.union(mesh2.bounds))
+        XCTAssertEqual(mesh.bounds, Bounds(polygons: mesh.polygons))
+    }
+
+    func testConvexHullOfSpheres() {
+        let mesh1 = Mesh.sphere().translated(by: Vector(-1, 0.2, -0.1))
+        let mesh2 = Mesh.sphere().translated(by: Vector(1, 0))
+        let mesh = Mesh.convexHull(of: [mesh1, mesh2])
+        XCTAssert(mesh.isKnownConvex)
+        XCTAssert(mesh.isActuallyConvex)
+        XCTAssert(mesh.isWatertight)
+        XCTAssert(mesh.polygons.areWatertight)
+        XCTAssertEqual(mesh.bounds, mesh1.bounds.union(mesh2.bounds))
+        XCTAssertEqual(mesh.bounds, Bounds(polygons: mesh.polygons))
+    }
+
+    func testConvexHullOfCubeIsItself() {
+        let cube = Mesh.cube()
+        let mesh = Mesh.convexHull(of: [cube])
+        XCTAssertEqual(cube, mesh)
+        let mesh2 = Mesh.convexHull(of: cube.polygons)
+        XCTAssertEqual(
+            Set(cube.polygons.flatMap { $0.vertices }),
+            Set(mesh2.polygons.flatMap { $0.vertices })
+        )
+        XCTAssertEqual(cube.polygons.count, mesh2.detessellate().polygons.count)
+    }
+
+    func testConvexHullOfNothing() {
+        let mesh = Mesh.convexHull(of: [] as [Mesh])
+        XCTAssertEqual(mesh, .empty)
+    }
+
+    func testConvexHullOfSingleTriangle() {
+        let triangle = Polygon(unchecked: [
+            Vector(0, 0),
+            Vector(1, 0),
+            Vector(1, 1),
+        ])
+        let mesh = Mesh.convexHull(of: [triangle])
+        XCTAssert(mesh.isKnownConvex)
+        XCTAssert(mesh.isActuallyConvex)
+        XCTAssert(mesh.isWatertight)
+        XCTAssert(mesh.polygons.areWatertight)
+        XCTAssertEqual(mesh.bounds, triangle.bounds)
+        XCTAssertEqual(mesh.bounds, Bounds(polygons: mesh.polygons))
+    }
+
+    func testConvexHullOfConcavePolygon() {
+        let shape = Polygon(unchecked: [
+            Vector(0, 0),
+            Vector(1, 0),
+            Vector(1, 1),
+            Vector(0.5, 1),
+            Vector(0.5, 0.5),
+        ])
+        let mesh = Mesh.convexHull(of: [shape])
+        XCTAssert(mesh.isKnownConvex)
+        XCTAssert(mesh.isActuallyConvex)
+        XCTAssert(mesh.isWatertight)
+        XCTAssert(mesh.polygons.areWatertight)
+        XCTAssertEqual(mesh.bounds, shape.bounds)
+        XCTAssertEqual(mesh.bounds, Bounds(polygons: mesh.polygons))
     }
 }
