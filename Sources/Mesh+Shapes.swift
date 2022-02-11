@@ -638,6 +638,17 @@ public extension Mesh {
         convexHull(of: polygons, with: nil, bounds: nil)
     }
 
+    /// Compute the convex hull of a set of paths.
+    /// - Parameters
+    ///   - paths: A set of paths to compute the hull around.
+    ///   - material: An optional material to apply to the mesh.
+    static func convexHull<T: Sequence>(
+        of paths: T,
+        material: Material? = nil
+    ) -> Mesh where T.Element == Path {
+        convexHull(of: paths.flatMap { $0.edgeVertices }, material: material)
+    }
+
     /// Compute the convex hull of a set of vertices.
     /// - Parameters
     ///   - vertices: A set of vertices to compute the hull around.
