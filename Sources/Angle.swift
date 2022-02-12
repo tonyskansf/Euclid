@@ -43,6 +43,16 @@ public struct Angle: Hashable, Comparable {
     }
 }
 
+/// Returns a new angle that represents the minimum of the two angles.
+public func min(_ lhs: Angle, _ rhs: Angle) -> Angle {
+    .init(radians: min(lhs.radians, rhs.radians))
+}
+
+/// Returns a new angle representing the maximum of the two angles.
+public func max(_ lhs: Angle, _ rhs: Angle) -> Angle {
+    .init(radians: max(lhs.radians, rhs.radians))
+}
+
 extension Angle: Codable {
     private enum CodingKeys: CodingKey {
         case radians, degrees
