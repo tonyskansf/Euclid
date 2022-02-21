@@ -519,6 +519,22 @@ class PathTests: XCTestCase {
         XCTAssertEqual(vertices[5].normal, Vector(0, -1))
     }
 
+    // MARK: inset
+
+    func testInsetSquare() {
+        let path = Path.square()
+        let result = path.inset(by: 0.25)
+        XCTAssertEqual(result, .square(size: 0.5))
+    }
+
+    func testInsetCircle() {
+        let path = Path.circle(segments: 4)
+        let result = path.inset(by: 0.25)
+        let adjacent = sqrt(pow(0.5, 2) * 2) / 2
+        let radius = sqrt(pow(adjacent - 0.25, 2) * 2)
+        XCTAssertEqual(result, .circle(radius: radius, segments: 4))
+    }
+
     // MARK: Y-axis clipping
 
     func testClipClosedClockwiseTriangleToRightOfAxis() {
