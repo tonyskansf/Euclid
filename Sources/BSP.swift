@@ -30,13 +30,74 @@
 //
 
 struct BSP {
-    private var nodes: [BSPNode]
-    private(set) var isConvex: Bool
+    private var root: BSPNode?
+
+    init(_ mesh: Mesh) {
+        root = BSPNode(polygons: mesh.polygons, isConvex: mesh.isKnownConvex)
+    }
+
+    private init(root: BSPNode) {
+        self.root = root
+    }
+}
+
+// MARK: - Iterator
+fileprivate extension BSP {
+    struct BSPIterator: Sequence, IteratorProtocol {
+        var stack: [BSPNode] = []
+        var currentNode: BSPNode?
+        var polygonIndex = 0
+
+        init(node: BSPNode?) {
+            currentNode = node
+            pushChildren()
+        }
+
+        mutating func pushChildren() {
+            guard let node = currentNode else {
+                return
+            }
+
+            if let front = node.front {
+                stack.append(front)
+            }
+
+            if let back = node.back {
+                stack.append(back)
+            }
+        }
+
+        mutating func next() -> Polygon? {
+            guard let node = currentNode else {
+                return nil
+            }
+
+            while polygonIndex >= node.polygons.count {
+                if stack.isEmpty {
+                    return nil
+                } else {
+                    currentNode = stack.popLast()!
+                    polygonIndex = 0
+                    pushChildren()
+                }
+            }
+
+            let polygon = node.polygons[polygonIndex]
+            polygonIndex += 1
+            return polygon
+        }
+
+        func makeIterator() -> BSPIterator {
+            self
+        }
+    }
+
+    var polygons: BSPIterator {
+        BSPIterator(node: root)
+    }
 }
 
 extension BSP {
-    typealias CancellationHandler = () -> Bool
-
     enum ClipRule {
         case greaterThan
         case greaterThanEqual
@@ -44,46 +105,50 @@ extension BSP {
         case lessThanEqual
     }
 
-    init(_ mesh: Mesh, _ isCancelled: CancellationHandler) {
-        self.nodes = [BSPNode]()
-        self.isConvex = mesh.isKnownConvex
-        initialize(mesh.polygons, isCancelled)
+    func clip(_ polygons: [Polygon], _ keeping: ClipRule) -> [Polygon] {
+        var id = 0
+        return root?.clip(polygons.map { $0.with(id: 0) }, keeping, &id) ?? polygons
     }
 
-    func clip(
-        _ polygons: [Polygon],
-        _ keeping: ClipRule,
-        _ isCancelled: CancellationHandler
-    ) -> [Polygon] {
-        var id = 0
-        var out: [Polygon]?
-        return clip(polygons.map { $0.with(id: 0) }, keeping, &out, &id, isCancelled)
+    func duplicate() -> BSP {
+        self
     }
 
-    func split(
-        _ polygons: [Polygon],
-        _ left: ClipRule,
-        _ right: ClipRule,
-        _ isCancelled: CancellationHandler
-    ) -> ([Polygon], [Polygon]) {
-        var id = 0
-        var rhs: [Polygon]? = []
-        let lhs = clip(polygons.map { $0.with(id: 0) }, left, &rhs, &id, isCancelled)
-        switch (left, right) {
-        case (.lessThan, .greaterThan),
-             (.greaterThan, .lessThan):
-            var ignore: [Polygon]?
-            return (lhs, clip(rhs!, right, &ignore, &id, isCancelled))
-        default:
-            return (lhs, rhs!)
+    mutating func merge(_ bsp: BSP) {
+        guard root != nil else {
+            self.root = bsp.duplicate().root
+            return
         }
+
+        var stack : [BSPNode] = [self.root!]
+        while !stack.isEmpty {
+            let node = stack.popLast()!
+            if (node !== root) {
+                root!.merge(node)
+            }
+            if node.front != nil {
+                stack.append(node.front!)
+            }
+            if node.back != nil {
+                stack.append(node.back!)
+            }
+        }
+    }
+
+    func translated(by translation: Vector) -> BSP {
+        guard root != nil else {
+            return self
+        }
+
+        return BSP(root: root!.translated(by: translation))
     }
 }
 
 private extension BSP {
     final class BSPNode {
-        var front: Int = 0
-        var back: Int = 0
+        weak var parent: BSPNode?
+        var front: BSPNode?
+        var back: BSPNode?
         var polygons = [Polygon]()
         var plane: Plane
 
@@ -94,6 +159,44 @@ private extension BSP {
         init(polygon: Polygon) {
             self.polygons = [polygon]
             self.plane = polygon.plane
+        }
+
+        init(plane: Plane, parent: BSPNode?) {
+            self.plane = plane
+            self.parent = parent
+        }
+
+        init?(polygons: [Polygon], isConvex: Bool) {
+            guard !polygons.isEmpty else {
+                return nil
+            }
+
+            guard isConvex else {
+                plane = polygons[0].plane
+                insert(polygons)
+                return
+            }
+
+            // Shuffle polygons to reduce average number of splits and sort by plane.
+            var rng = DeterministicRNG()
+            let polygons = polygons
+                .shuffled(using: &rng)
+                .sortedByPlane()
+
+            // Use fast bsp construction
+            plane = polygons[0].plane
+            var parent = self
+            parent.polygons = [polygons[0]]
+            for polygon in polygons.dropFirst() {
+                if polygon.plane.isEqual(to: parent.plane) {
+                    parent.polygons.append(polygon)
+                    continue
+                }
+                let node = BSPNode(plane: polygon.plane, parent: parent)
+                node.polygons = [polygon]
+                parent.back = node
+                parent = node
+            }
         }
     }
 
@@ -107,109 +210,61 @@ private extension BSP {
             return result.high ^ result.low
         }
     }
+}
 
-    mutating func initialize(_ polygons: [Polygon], _ isCancelled: CancellationHandler) {
-        nodes.reserveCapacity(polygons.count)
-        var rng = DeterministicRNG()
+private extension BSP.BSPNode {
+    func insert(_ polygons: [Polygon]) {
+        var polygons = polygons
+        var currentNode = self
 
-        guard isConvex else {
-            guard !polygons.isEmpty else {
-                return
-            }
-            // Randomly shuffle polygons to reduce average number of splits
-            let polygons = polygons.shuffled(using: &rng)
-            nodes.append(BSPNode(plane: polygons[0].plane))
-            insert(polygons, isCancelled)
-            return
-        }
-
-        // Sort polygons by plane
-        let polygons = polygons.sortedByPlane()
-
-        // Create nodes
-        var parent: BSPNode?
-        for polygon in polygons {
-            if let parent = parent, polygon.plane.isEqual(to: parent.plane) {
-                parent.polygons.append(polygon)
-                continue
-            }
-            let node = BSPNode(polygon: polygon)
-            nodes.append(node)
-            parent = node
-        }
-
-        // Randomly shuffle nodes to reduce average number of splits
-        nodes.shuffle(using: &rng)
-
-        // Use fast BSP construction
-        for i in 0 ..< nodes.count - 1 {
-            nodes[i].back = i + 1
-        }
-    }
-
-    mutating func insert(_ polygons: [Polygon], _ isCancelled: CancellationHandler) {
-        var isActuallyConvex = true
-        var stack = [(node: nodes[0], polygons: polygons)]
-        while let (node, polygons) = stack.popLast(), !isCancelled() {
+        while !polygons.isEmpty {
             var front = [Polygon](), back = [Polygon]()
+
+            // Split polygons by the current node's plane.
             for polygon in polygons {
-                switch polygon.compare(with: node.plane) {
+                switch polygon.compare(with: currentNode.plane) {
                 case .coplanar:
-                    if node.plane.normal.dot(polygon.plane.normal) > 0 {
-                        node.polygons.append(polygon)
+                    if currentNode.plane.normal.dot(polygon.plane.normal) > 0 {
+                        currentNode.polygons.append(polygon)
                     } else {
                         back.append(polygon)
                     }
                 case .front:
                     front.append(polygon)
-                    isActuallyConvex = false
                 case .back:
                     back.append(polygon)
                 case .spanning:
                     var id = 0
-                    polygon.split(spanning: node.plane, &front, &back, &id)
-                    isActuallyConvex = false
+                    polygon.split(spanning: currentNode.plane, &front, &back, &id)
                 }
             }
-            if let first = front.first {
-                let next: BSPNode
-                if node.front > 0 {
-                    next = nodes[node.front]
-                } else {
-                    next = BSPNode(plane: first.plane)
-                    node.front = nodes.count
-                    nodes.append(next)
-                }
-                stack.append((next, front))
-            }
-            if let first = back.first {
-                let next: BSPNode
-                if node.back > 0 {
-                    next = nodes[node.back]
-                } else {
-                    next = BSPNode(plane: first.plane)
-                    node.back = nodes.count
-                    nodes.append(next)
-                }
-                stack.append((next, back))
+
+            currentNode.front = currentNode.front ?? front.first.map { BSP.BSPNode(plane: $0.plane, parent: currentNode) }
+            currentNode.back = currentNode.back ?? back.first.map { BSP.BSPNode(plane: $0.plane, parent: currentNode) }
+
+            if front.count > back.count {
+                currentNode.back?.insert(back)
+                polygons = front
+                currentNode = currentNode.front!
+            } else {
+                currentNode.front?.insert(front)
+                polygons = back
+                currentNode = currentNode.back ?? currentNode
             }
         }
-        isConvex = isActuallyConvex
     }
 
     func clip(
         _ polygons: [Polygon],
         _ keeping: BSP.ClipRule,
-        _ out: inout [Polygon]?,
-        _ id: inout Int,
-        _ isCancelled: CancellationHandler
+        _ id: inout Int
     ) -> [Polygon] {
-        guard !nodes.isEmpty else {
-            return polygons
-        }
+        var polygons = polygons
+        var currentNode = self
         var total = [Polygon]()
-        var rejects = [Polygon]()
-        func addPolygons(_ polygons: [Polygon], to total: inout [Polygon]) {
+        let keepFront = [.greaterThan, .greaterThanEqual].contains(keeping)
+
+        func addPolygons(_ polygons: [Polygon]) {
             for a in polygons {
                 guard a.id != 0 else {
                     total.append(a)
@@ -226,45 +281,69 @@ private extension BSP {
                 total.append(a)
             }
         }
-        let keepFront = [.greaterThan, .greaterThanEqual].contains(keeping)
-        var stack = [(node: nodes[0], polygons: polygons)]
-        while let (node, polygons) = stack.popLast(), !isCancelled() {
+
+        while !polygons.isEmpty {
             var coplanar = [Polygon](), front = [Polygon](), back = [Polygon]()
+
+            // Split polygons by the current node's plane.
             for polygon in polygons {
-                polygon.split(along: node.plane, &coplanar, &front, &back, &id)
+                polygon.split(along: currentNode.plane, &coplanar, &front, &back, &id)
             }
+
+            // Clip coplanar polygons with the current node's polygons based on the keeping logic.
             for polygon in coplanar {
                 switch keeping {
                 case .greaterThan, .lessThanEqual:
-                    polygon.clip(to: node.polygons, &back, &front, &id)
+                    polygon.clip(to: currentNode.polygons, &back, &front, &id)
                 case .greaterThanEqual, .lessThan:
-                    if node.plane.normal.dot(polygon.plane.normal) > 0 {
+                    if currentNode.plane.normal.dot(polygon.plane.normal) > 0 {
                         front.append(polygon)
                     } else {
-                        polygon.clip(to: node.polygons, &back, &front, &id)
+                        polygon.clip(to: currentNode.polygons, &back, &front, &id)
                     }
                 }
             }
-            if !front.isEmpty {
-                if node.front > 0 {
-                    stack.append((nodes[node.front], front))
-                } else if keepFront {
-                    addPolygons(front, to: &total)
-                } else if out != nil {
-                    addPolygons(front, to: &rejects)
+
+            if front.count > back.count {
+                addPolygons(currentNode.back?.clip(back, keeping, &id) ?? (keepFront ? [] : back))
+                if currentNode.front == nil {
+                    addPolygons(keepFront ? front : [])
+                    return total
                 }
-            }
-            if !back.isEmpty {
-                if node.back > 0 {
-                    stack.append((nodes[node.back], back))
-                } else if !keepFront {
-                    addPolygons(back, to: &total)
-                } else if out != nil {
-                    addPolygons(back, to: &rejects)
+                polygons = front
+                currentNode = currentNode.front!
+            } else {
+                addPolygons(currentNode.front?.clip(front, keeping, &id) ?? (keepFront ? front : []))
+                if currentNode.back == nil {
+                    addPolygons(keepFront ? [] : back)
+                    return total
                 }
+                polygons = back
+                currentNode = currentNode.back!
             }
         }
-        out = rejects
         return total
+    }
+
+    func translated(by translation: Vector, parent: BSP.BSPNode? = nil) -> BSP.BSPNode {
+        let translated = BSP.BSPNode(
+            plane: self.plane.translated(by: translation),
+            parent: parent
+        )
+
+        translated.polygons.append(contentsOf: polygons.map { $0.translated(by: translation) })
+
+        if front != nil {
+            translated.front = front!.translated(by: translation, parent: translated)
+        }
+
+        if back != nil {
+            translated.back = back!.translated(by: translation, parent: translated)
+        }
+        return translated
+    }
+
+    func merge(_ node: BSP.BSPNode) {
+        insert(node.polygons)
     }
 }
