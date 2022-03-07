@@ -123,13 +123,20 @@ public extension Transform {
 public extension Mesh {
     /// Returns a translated copy of the mesh.
     /// - Parameter v: An offset vector to apply to the mesh.
-    func translated(by v: Vector) -> Mesh {
-        Mesh(
-            unchecked: polygons.translated(by: v),
-            bounds: boundsIfSet?.translated(by: v),
+    func translated(by translation: Vector) -> Mesh {
+        var translated = Mesh(
+            unchecked: polygons.translated(by: translation),
+            bounds: boundsIfSet?.translated(by: translation),
             isConvex: isKnownConvex,
-            isWatertight: watertightIfSet
+            isWatertight: isWatertight
         )
+
+        if hasBsp {
+            translated.bsp = bsp.translated(by: translation)
+        }
+
+        return translated
+
     }
 
     /// Returns a rotated copy of the mesh.

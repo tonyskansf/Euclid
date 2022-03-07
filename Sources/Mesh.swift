@@ -39,6 +39,7 @@ public struct Mesh: Hashable {
     private let storage: Storage
 }
 
+// MARK: - Codable
 extension Mesh: Codable {
     private enum CodingKeys: String, CodingKey {
         case polygons, bounds, isConvex = "convex", materials
@@ -168,12 +169,19 @@ public extension Mesh {
         if let ab = self.boundsIfSet, let bb = mesh.boundsIfSet {
             boundsIfSet = ab.union(bb)
         }
-        return Mesh(
+        let merged = Mesh(
             unchecked: polygons + mesh.polygons,
             bounds: boundsIfSet,
             isConvex: false,
             isWatertight: watertightIfSet
         )
+
+        if hasBsp {
+            storage.bsp!.merge(mesh.bsp)
+            merged.storage.bsp = storage.bsp
+            storage.bsp = nil
+        }
+        return merged
     }
 
     /// Creates a new mesh that is the combination of the polygons from all the specified meshes.
@@ -335,12 +343,25 @@ internal extension Mesh {
     var boundsIfSet: Bounds? { storage.boundsIfSet }
     var watertightIfSet: Bool? { storage.watertightIfSet }
     var isKnownConvex: Bool { storage.isConvex }
+    var hasBsp: Bool { storage.bsp != nil }
+    var bsp: BSP {
+        get {
+            if storage.bsp == nil {
+                storage.bsp = BSP(self)
+            }
+            return storage.bsp!
+        }
+        set {
+            storage.bsp = newValue
+        }
+    }
 }
 
 private extension Mesh {
     final class Storage: Hashable {
         let polygons: [Polygon]
         let isConvex: Bool
+        var bsp: BSP?
 
         static let empty = Storage(
             polygons: [],

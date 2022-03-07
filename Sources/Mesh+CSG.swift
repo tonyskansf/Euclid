@@ -66,19 +66,19 @@ public extension Mesh {
                 isWatertight: nil
             )
         }
-        var out: [Polygon]? = []
-        let ap = BSP(mesh, isCancelled).clip(
-            boundsTest(intersection, polygons, &out),
-            .greaterThan,
-            isCancelled
-        )
-        let bp = BSP(self, isCancelled).clip(
-            boundsTest(intersection, mesh.polygons, &out),
-            .greaterThanEqual,
-            isCancelled
-        )
+
+        var aout: [Polygon] = []
+        var bout: [Polygon] = []
+        var ap = polygons
+        var bp = mesh.polygons
+
+        boundsTest(intersection, &ap, &bp, &aout, &bout)
+
+        ap = mesh.bsp.clip(ap, .greaterThan)
+        bp = self.bsp.clip(bp, .greaterThanEqual)
+
         return Mesh(
-            unchecked: out! + ap + bp,
+            unchecked: aout + bout + ap + bp,
             bounds: bounds.union(mesh.bounds),
             isConvex: false,
             isWatertight: nil
@@ -118,19 +118,18 @@ public extension Mesh {
         guard !intersection.isEmpty else {
             return self
         }
-        var aout: [Polygon]? = [], bout: [Polygon]?
-        let ap = BSP(mesh, isCancelled).clip(
-            boundsTest(intersection, polygons, &aout),
-            .greaterThan,
-            isCancelled
-        )
-        let bp = BSP(self, isCancelled).clip(
-            boundsTest(intersection, mesh.polygons, &bout),
-            .lessThan,
-            isCancelled
-        )
+        var ap = polygons
+        var bp = mesh.polygons
+        var aout: [Polygon] = []
+        var bout: [Polygon] = []
+
+        boundsTest(intersection, &ap, &bp, &aout, &bout)
+
+        ap = mesh.bsp.clip(ap, .greaterThan)
+        bp = self.bsp.clip(bp, .lessThan)
+
         return Mesh(
-            unchecked: aout! + ap + bp.map { $0.inverted() },
+            unchecked: aout + ap + bp.map { $0.inverted() },
             bounds: nil, // TODO: is there a way to preserve this efficiently?
             isConvex: false,
             isWatertight: nil
@@ -170,15 +169,25 @@ public extension Mesh {
         guard !intersection.isEmpty else {
             return merge(mesh)
         }
-        let absp = BSP(self, isCancelled), bbsp = BSP(mesh, isCancelled)
-        var aout: [Polygon]? = [], bout: [Polygon]? = []
-        let ap = boundsTest(intersection, polygons, &aout)
-        let bp = boundsTest(intersection, mesh.polygons, &bout)
-        let (ap1, ap2) = bbsp.split(ap, .greaterThan, .lessThan, isCancelled)
-        let (bp2, bp1) = absp.split(bp, .greaterThan, .lessThan, isCancelled)
+
+        var ap = polygons
+        var bp = mesh.polygons
+        var aout: [Polygon] = []
+        var bout: [Polygon] = []
+
+        boundsTest(intersection, &ap, &bp, &aout, &bout)
+
+        let absp = bsp
+        let bbsp = mesh.bsp
+        let ap1 = bbsp.clip(ap, .greaterThan)
+        let bp1 = absp.clip(bp, .lessThan)
+        let ap2 = bbsp.clip(ap, .lessThan)
+        let bp2 = absp.clip(bp, .greaterThan)
+
         // Avoids slow compilation from long expression
-        let lhs = aout! + ap1 + bp1.map { $0.inverted() }
-        let rhs = bout! + bp2 + ap2.map { $0.inverted() }
+        let lhs = aout + ap1 + bp1.map { $0.inverted() }
+        let rhs = bout + bp2 + ap2.map { $0.inverted() }
+
         return Mesh(
             unchecked: lhs + rhs,
             bounds: nil, // TODO: is there a way to efficiently preserve this?
@@ -223,17 +232,17 @@ public extension Mesh {
         guard !intersection.isEmpty else {
             return Mesh([])
         }
-        var aout: [Polygon]?, bout: [Polygon]?
-        let ap = BSP(mesh, isCancelled).clip(
-            boundsTest(intersection, polygons, &aout),
-            .lessThan,
-            isCancelled
-        )
-        let bp = BSP(self, isCancelled).clip(
-            boundsTest(intersection, mesh.polygons, &bout),
-            .lessThanEqual,
-            isCancelled
-        )
+
+        var ap = polygons
+        var bp = mesh.polygons
+        var aout: [Polygon] = []
+        var bout: [Polygon] = []
+
+        boundsTest(intersection, &ap, &bp, &aout, &bout)
+
+        ap = mesh.bsp.clip(ap, .lessThan)
+        bp = self.bsp.clip(bp, .lessThanEqual)
+
         return Mesh(
             unchecked: ap + bp,
             bounds: nil, // TODO: is there a way to efficiently preserve this?
@@ -278,13 +287,21 @@ public extension Mesh {
         guard !intersection.isEmpty else {
             return self
         }
-        var aout: [Polygon]? = []
-        let ap = boundsTest(bounds.intersection(mesh.bounds), polygons, &aout)
-        let bsp = BSP(mesh, isCancelled)
-        let (outside, inside) = bsp.split(ap, .greaterThan, .lessThanEqual, isCancelled)
+
+        var ap = polygons
+        var bp = mesh.polygons
+        var aout: [Polygon] = []
+        var bout: [Polygon] = []
+
+        boundsTest(bounds.intersection(mesh.bounds), &ap, &bp, &aout, &bout)
+
+        let bsp = mesh.bsp
+        let outside = bsp.clip(ap, .greaterThan)
+        let inside = bsp.clip(ap, .lessThanEqual)
         let material = mesh.polygons.first?.material
+
         return Mesh(
-            unchecked: aout! + outside + inside.map { $0.with(material: material) },
+            unchecked: aout + outside + inside.map { $0.with(material: material) },
             bounds: bounds,
             isConvex: isKnownConvex,
             isWatertight: nil
@@ -368,8 +385,7 @@ public extension Mesh {
             .translated(by: plane.normal * plane.w)
             // Clip rect
             return Mesh(
-                unchecked: mesh.polygons + BSP(self) { false }
-                    .clip([rect], .lessThan) { false },
+                unchecked: mesh.polygons + self.bsp.clip([rect], .lessThan),
                 bounds: nil,
                 isConvex: isKnownConvex,
                 isWatertight: watertightIfSet
@@ -379,16 +395,17 @@ public extension Mesh {
 }
 
 private func boundsTest(
-    _ bounds: Bounds,
-    _ polygons: [Polygon],
-    _ out: inout [Polygon]?
-) -> [Polygon] {
-    polygons.filter {
-        if $0.bounds.intersects(bounds) {
-            return true
-        }
-        out?.append($0)
-        return false
+    _ intersection: Bounds,
+    _ lhs: inout [Polygon], _ rhs: inout [Polygon],
+    _ lout: inout [Polygon], _ rout: inout [Polygon]
+) {
+    for (i, p) in lhs.enumerated().reversed() where !p.bounds.intersects(intersection) {
+        lout.append(p)
+        lhs.remove(at: i)
+    }
+    for (i, p) in rhs.enumerated().reversed() where !p.bounds.intersects(intersection) {
+        rout.append(p)
+        rhs.remove(at: i)
     }
 }
 
