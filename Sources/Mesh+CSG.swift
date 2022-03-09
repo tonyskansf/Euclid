@@ -146,8 +146,8 @@ public extension Mesh {
             }
         }
 
-        print("[Euclid][CSG-subtract] bout polygons:", bout!.count)
-        bout!.enumerated().forEach { offset, polygon in
+        print("[Euclid][CSG-subtract] bout polygons:", bout?.count)
+        bout?.enumerated().forEach { offset, polygon in
             print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count)
             polygon.vertices.enumerated().forEach { index, vertex in
                 print("[Euclid][CSG-subtract] \t\t - [\(index)]", vertex.position)
