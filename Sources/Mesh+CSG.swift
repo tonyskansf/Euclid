@@ -132,7 +132,7 @@ public extension Mesh {
 
         print("[Euclid][CSG-subtract] aout polygons:", aout!.count)
         aout!.enumerated().forEach { offset, polygon in
-            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count)
+            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count, "bounds: \(polygon.bounds)")
             polygon.vertices.enumerated().forEach { index, vertex in
                 print("[Euclid][CSG-subtract] \t\t - [\(index)]", vertex.position)
             }
@@ -140,7 +140,7 @@ public extension Mesh {
 
         print("[Euclid][CSG-subtract] ap polygons:", ap.count)
         ap.enumerated().forEach { offset, polygon in
-            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count)
+            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count, "bounds: \(polygon.bounds)")
             polygon.vertices.enumerated().forEach { index, vertex in
                 print("[Euclid][CSG-subtract] \t\t - [\(index)]", vertex.position)
             }
@@ -148,7 +148,7 @@ public extension Mesh {
 
         print("[Euclid][CSG-subtract] bout polygons:", bout?.count)
         bout?.enumerated().forEach { offset, polygon in
-            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count)
+            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count, "bounds: \(polygon.bounds)")
             polygon.vertices.enumerated().forEach { index, vertex in
                 print("[Euclid][CSG-subtract] \t\t - [\(index)]", vertex.position)
             }
@@ -156,7 +156,7 @@ public extension Mesh {
 
         print("[Euclid][CSG-subtract] bp polygons:", bp.count)
         bp.enumerated().forEach { offset, polygon in
-            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count)
+            print("[Euclid][CSG-subtract] \t Polygon \(offset) - vertices:", polygon.vertices.count, "bounds: \(polygon.bounds)")
             polygon.vertices.enumerated().forEach { index, vertex in
                 print("[Euclid][CSG-subtract] \t\t - [\(index)]", vertex.position)
             }
