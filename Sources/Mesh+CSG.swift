@@ -130,11 +130,14 @@ public extension Mesh {
             isCancelled
         )
 
+        let unchecked = aout! + ap + bp.map { $0.inverted() }
+        let isWatertight = unchecked.areWatertight
+        print("[debugx][CSG-subtract] Resulting mesh is watertight:", isWatertight)
         return Mesh(
-            unchecked: aout! + ap + bp.map { $0.inverted() },
+            unchecked: unchecked,
             bounds: nil, // TODO: is there a way to preserve this efficiently?
             isConvex: false,
-            isWatertight: nil
+            isWatertight: isWatertight
         )
     }
 
