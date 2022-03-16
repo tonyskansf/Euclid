@@ -66,7 +66,8 @@ public struct Vector: Hashable {
     /// Returns a Boolean value that indicates if the two vectors are approximately equal.
     public static func == (lhs: Vector, rhs: Vector) -> Bool {
 //        lhs.isEqual(to: rhs, withPrecision: 1e-10)
-        lhs.isEqual(to: rhs)
+//        lhs.isEqual(to: rhs)
+        lhs.isEqual(to: rhs, withPrecision: 1e-6)
     }
 }
 
