@@ -31,13 +31,11 @@
 
 // Tolerance used for calculating approximate equality
 public var epsilon = 1e-7
-public var quantizePrecision = 1e-10
-//let epsilon = 1e-4
+public var quantizePrecision = 1e-12
 
 // Round-off floating point values to simplify equality checks
 func quantize(_ value: Double) -> Double {
-//    let precision = 1e-10
-    return (value / quantizePrecision).rounded() * quantizePrecision
+    (value / quantizePrecision).rounded() * quantizePrecision
 }
 
 extension Double {
