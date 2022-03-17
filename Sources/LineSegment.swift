@@ -58,14 +58,6 @@ extension LineSegment: Comparable {
         }
         return lhs.start < rhs.start
     }
-
-    public static func == (lhs: LineSegment, rhs: LineSegment) -> Bool {
-        if lhs.start != rhs.start {
-            return lhs.start == rhs.end && lhs.end == rhs.start
-        }
-
-        return lhs.end == rhs.end
-    }
 }
 
 extension LineSegment: Codable {
