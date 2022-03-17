@@ -60,7 +60,11 @@ extension LineSegment: Comparable {
     }
 
     public static func == (lhs: LineSegment, rhs: LineSegment) -> Bool {
-        lhs.start != rhs.start ? lhs == rhs.inverted() : lhs.end == rhs.end
+        if lhs.start != rhs.start {
+            return lhs.start == rhs.end && lhs.end == rhs.start
+        }
+
+        return lhs.end == rhs.end
     }
 }
 
