@@ -30,8 +30,8 @@
 //
 
 // Tolerance used for calculating approximate equality
-var epsilon = 1e-7
-var quantizePrecision = 1e-10
+public var epsilon = 1e-7
+public var quantizePrecision = 1e-10
 //let epsilon = 1e-4
 
 // Round-off floating point values to simplify equality checks
