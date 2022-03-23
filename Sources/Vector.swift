@@ -58,6 +58,7 @@ public struct Vector: Hashable {
     /// - Parameter hasher: The hasher to use when combining the components of this instance.
     public func hash(into hasher: inout Hasher) {
         let precision = 1e-6
+        print("[debugx][Euclid] Vector.hash(into:)")
         hasher.combine((x / precision).rounded() * precision)
         hasher.combine((y / precision).rounded() * precision)
         hasher.combine((z / precision).rounded() * precision)
@@ -66,7 +67,8 @@ public struct Vector: Hashable {
     /// Returns a Boolean value that indicates if the two vectors are approximately equal.
     public static func == (lhs: Vector, rhs: Vector) -> Bool {
 //        lhs.isEqual(to: rhs, withPrecision: 1e-10)
-        lhs.isEqual(to: rhs)
+        print("[debugx][Euclid] Vector.==")
+        return lhs.isEqual(to: rhs)
 //        lhs.isEqual(to: rhs, withPrecision: 1e-6)
     }
 }

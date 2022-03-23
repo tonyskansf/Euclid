@@ -363,6 +363,7 @@ internal extension Collection where Element == Polygon {
         var edgeCounts = [LineSegment: Int]()
         for polygon in self {
             for edge in polygon.undirectedEdges {
+                print("[debugx][Euclid] Dictionary lookup:", edge)
                 edgeCounts[edge, default: 0] += 1
             }
         }
