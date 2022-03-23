@@ -32,6 +32,7 @@
 // Tolerance used for calculating approximate equality
 public var epsilon = 1e-7
 public var quantizePrecision = 1e-12
+public var vectorHashPrecision = 1e-7
 
 // Round-off floating point values to simplify equality checks
 func quantize(_ value: Double) -> Double {

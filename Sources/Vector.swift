@@ -57,7 +57,8 @@ public struct Vector: Hashable {
     /// Hashes the essential components of the vector at reduced precision.
     /// - Parameter hasher: The hasher to use when combining the components of this instance.
     public func hash(into hasher: inout Hasher) {
-        let precision = 1e-6
+//        let precision = 1e-6
+        let precision = vectorHashPrecision
         print("[debugx][Euclid] Vector.hash(into:)")
         hasher.combine((x / precision).rounded() * precision)
         hasher.combine((y / precision).rounded() * precision)
