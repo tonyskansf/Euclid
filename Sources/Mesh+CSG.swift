@@ -134,7 +134,7 @@ public extension Mesh {
         print("[debugx] aout", aout!.areWatertight)
         print("[debugx] ap", ap.areWatertight)
         print("[debugx] inverted", inverted.areWatertight)
-        let unchecked = aout! + ap + inverted
+        let unchecked = aout!.makeWatertight() + ap.makeWatertight() + inverted.makeWatertight()
         let isWatertight = unchecked.areWatertight
         print("[debugx][CSG-subtract] Resulting mesh is watertight:", isWatertight)
         return Mesh(
