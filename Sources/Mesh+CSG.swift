@@ -130,7 +130,11 @@ public extension Mesh {
             isCancelled
         )
 
-        let unchecked = aout! + ap + bp.map { $0.inverted() }
+        let inverted = bp.map { $0.inverted() }
+        print("[debugx] aout", aout!.areWatertight)
+        print("[debugx] ap", ap.areWatertight)
+        print("[debugx] inverted", inverted.areWatertight)
+        let unchecked = aout! + ap + inverted
         let isWatertight = unchecked.areWatertight
         print("[debugx][CSG-subtract] Resulting mesh is watertight:", isWatertight)
         return Mesh(
